@@ -17,14 +17,19 @@ echo "— cause 2 d'abord (la plus structurante) : le Mango émet-il ?"
 if ping -c 1 -t 2 "$HOST" >/dev/null 2>&1; then
   echo "  ✅ routeur joignable ($HOST)"
 else
-  # le Mac n'est peut-être juste pas dessus : le SSID est-il dans l'air ?
-  if system_profiler SPAirPortDataType 2>/dev/null | grep -q "$SSID"; then
-    echo "  🟡 CAUSE 1 : $SSID émet mais le Mac n'est pas dessus."
-    echo "     -> networksetup -setairportnetwork en0 \"$SSID\""
-    exit 1
+  # PIEGE macOS (appris 2026-07-04) : system_profiler CAVIARDE les noms de SSID
+  # sans permission Localisation -> "absent du scan" ne prouve RIEN. On tente
+  # directement la re-jointure (marche meme si le scan est aveugle ; l'erreur
+  # -3900 est cosmetique, l'association suit souvent quand meme).
+  networksetup -setairportnetwork en0 "$SSID" >/dev/null 2>&1
+  sleep 8
+  if ping -c 2 -t 3 "$HOST" >/dev/null 2>&1; then
+    echo "  🟡 CAUSE 1 (resolue) : le Mac n'etait pas sur $SSID -> re-jointure OK."
   else
-    echo "  🔴 CAUSE 2 : $SSID absent de l'air -> Mango planté/éteint."
-    echo "     -> débrancher/rebrancher le routeur (JAMAIS de reboot SSH)."
+    echo "  🔴 CAUSE 2 probable : $HOST muet meme apres re-jointure."
+    echo "     MAIS verifier d'abord depuis un AUTRE appareil (iPhone -> http://$HOST)."
+    echo "     Si l'iPhone repond : probleme cote Mac (bail fantome, radio) -> couper/rallumer le Wi-Fi du Mac."
+    echo "     Si l'iPhone ne repond pas non plus : debrancher/rebrancher le routeur (JAMAIS de reboot SSH)."
     exit 2
   fi
 fi
