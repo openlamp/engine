@@ -359,6 +359,33 @@ class TuyaLamp(BaseLamp):
         self._dps(switch=True, mode="colour",
                   colour=d.rgb_to_hexvalue(r, g, b, d.dpset["value_hexformat"]))
         self.is_on = True
+        # VERIFIER-APRES-ECRITURE (bug du 2026-07-04 17h) : une session a moitie
+        # morte peut ACQUITTER sans EXECUTER (l'ack lu appartient a la commande
+        # precedente — tampon desynchronise). L'ack ne suffit donc pas pour les
+        # couleurs : on relit la teinte reelle (lecture drainee) et on renvoie
+        # UNE fois si divergence ; nouvel echec = session pourrie -> exception,
+        # la machinerie reconnexion+retry prend le relais.
+        import colorsys
+        want_h = round(colorsys.rgb_to_hsv(r / 255.0, g / 255.0, b / 255.0)[0] * 360)
+        for attempt in (1, 2):
+            try:
+                dps = self._status()
+            except Exception:
+                return                      # relecture impossible : on laisse filer
+            cd = dps.get(str(self.dev.dpset.get("colour") or 24), "")
+            if not (isinstance(cd, str) and len(cd) >= 4):
+                return                      # pas de teinte lisible : pas d'avis
+            got_h = int(cd[0:4], 16)
+            diff = abs(got_h - want_h)
+            if min(diff, 360 - diff) <= 10:
+                return                      # la lampe est bien a la couleur voulue
+            if attempt == 1:
+                log(self.name, "couleur non appliquee (lu %d, voulu %d) -> renvoi" %
+                    (got_h, want_h))
+                self._dps(switch=True, mode="colour",
+                          colour=d.rgb_to_hexvalue(r, g, b, d.dpset["value_hexformat"]))
+            else:
+                raise RuntimeError("couleur non appliquee apres renvoi (session pourrie)")
 
     def _fade_to(self, rgb_target, pct_target, dur_ms):
         # tt EMULE (natif chez WLED) : interpolation pas-a-pas sur le socket
