@@ -347,12 +347,17 @@ class TuyaLamp(BaseLamp):
         self.dev.heartbeat(nowait=False)
 
     def _post_exec_verify(self):
-        # ADAPTATIF (2026-07-04 17h45) : la relecture de verification est ELLE-MEME
-        # du trafic que le firmware supporte mal en cadence soutenue (~1 req/2s max).
-        # Lampe saine depuis 5 min => confiance a l'ack, zero lecture ajoutee.
-        # Souci recent => verification active (c'est la qu'on attrape les faux acks).
-        if time.time() - getattr(self, "_last_err_ts", 0) > 300:
+        # v3 (2026-07-04 18h35, angle mort trouve par Benoit) : le gating "erreur
+        # recente" etait aveugle aux FAUX ACKS — une lampe qui acquitte sans
+        # executer a l'air parfaitement saine, donc n'etait jamais verifiee.
+        # Nouveau contrat : verification A CADENCE PLAFONNEE — au plus une
+        # relecture par lampe toutes les 8 s, en fin de file. Cout ~8x sous le
+        # plafond firmware, et plus aucun etat final ne diverge sans etre vu.
+        now = time.time()
+        recent_err = now - getattr(self, "_last_err_ts", 0) < 300
+        if not recent_err and now - getattr(self, "_last_verify_ts", 0) < 8:
             return
+        self._last_verify_ts = now
         if self.q.empty():                     # matraquage : on ne verifie que la fin
             self._verify_colour()
 
