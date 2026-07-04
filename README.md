@@ -4,13 +4,13 @@ The **core layer** of the OpenLamp family: instant, 100% local control of smart 
 lamps (Tuya today, WLED experimental), exposed through a stable command contract —
 **OpenLamp State (OLS)**, a WLED-compatible JSON state patch (see [OLS.md](OLS.md)).
 
-Part of the [OpenLamp](https://github.com/Beennnn/openlamp) family:
+Part of the [OpenLamp](https://github.com/openlamp/openlamp) family:
 
 | Layer | Repo | Role |
 |---|---|---|
 | Engine (this repo) | `openlamp-engine` | drivers + dispatcher + local API + daemon + CLI |
-| Stream Deck frontend | [lumideck](https://github.com/Beennnn/lumideck) | keys, dials, live status on an Elgato Stream Deck |
-| MIDI frontend | [openlamp-midi](https://github.com/Beennnn/openlamp-midi) | stage control from physical MIDI controllers |
+| Stream Deck frontend | [lumideck](https://github.com/openlamp/lumideck) | keys, dials, live status on an Elgato Stream Deck |
+| MIDI frontend | [openlamp-midi](https://github.com/openlamp/midi) | stage control from physical MIDI controllers |
 
 ## What's inside
 
@@ -61,4 +61,4 @@ keys). Template:
 ```
 
 Made by **BenLab** with the help of Claude. WLED support is written but untested on
-real hardware — testers wanted: open an issue on [lumideck](https://github.com/Beennnn/lumideck/issues).
+real hardware — testers wanted: open an issue on [lumideck](https://github.com/openlamp/lumideck/issues).
