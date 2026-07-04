@@ -23,6 +23,11 @@ Part of the [OpenLamp](https://github.com/openlamp/openlamp) family:
   `on_change` hook.
 - **`daemon.py`** — headless host: runs the engine without any frontend app.
 - **`run-headless.sh`** — one command to switch to CLI/MIDI-only mode.
+- **`lamp-doctor.sh`** (macOS) — one-command diagnosis of "lamps unreachable",
+  testing the three causes in order: Mac on the wrong Wi-Fi / router down /
+  lamp powered off or radio-napping. Never trust the router's web panel (it
+  renders from service-worker cache even with the router dead) — this script is
+  the ground truth.
 - **`lamp.py`** — the CLI (also Bome-callable): `lamp.py vert`, `lamp.py bri:40`…
   Routes through the local API when a host runs, drives lamps directly otherwise.
 - **`com.benlab.lumideck-daemon.plist`** — launchd autostart for the daemon.
