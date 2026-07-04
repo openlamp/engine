@@ -8,7 +8,8 @@ Part of the [OpenLamp](https://github.com/openlamp/openlamp) family:
 
 | Layer | Repo | Role |
 |---|---|---|
-| Engine (this repo) | `openlamp-engine` | drivers + dispatcher + local API + daemon + CLI |
+| Engine (this repo) | `openlamp/engine` | drivers + dispatcher + local API + daemon + CLI (Python reference) |
+| Engine, JS port | [engine-js](https://github.com/openlamp/engine-js) | same contract on Node/tuyapi — for JS-first environments |
 | Stream Deck frontend | [lumideck](https://github.com/openlamp/lumideck) | keys, dials, live status on an Elgato Stream Deck |
 | MIDI frontend | [openlamp-midi](https://github.com/openlamp/midi) | stage control from physical MIDI controllers |
 
