@@ -81,6 +81,37 @@ def save_config(cfg):
 
 SYNTAX_VERSION = "2.0"   # syntaxe generique = patch d'etat compatible WLED (cf SYNTAXE-MOTEUR.md)
 
+_rejoin_last = [0.0]
+def rejoin_stage_wifi(cfg):
+    """Anti-zombie niveau 1.5 (appris 2026-07-04) : quand le Mac saute du Wi-Fi
+    scene (auto-join maison pendant une absence du routeur), il n'y REVIENT
+    jamais seul — bail fantome + lampes injoignables alors que le routeur va
+    bien. Si le routeur ne repond plus ET qu'un SSID est configure
+    ("router": {"ssid": "BEN-MUSIC", ...}), on re-joint d'office. L'erreur
+    -3900 de networksetup est cosmetique : l'association suit quand meme.
+    Throttle 3 min ; macOS re-bascule seul si le SSID est absent de l'air."""
+    r = (cfg or {}).get("router") or {}
+    host, ssid = r.get("host"), r.get("ssid")
+    if not host or not ssid or sys.platform != "darwin":
+        return False
+    if time.time() - _rejoin_last[0] < 180:
+        return False
+    try:
+        if subprocess.run(["ping", "-c", "1", "-t", "2", host],
+                          capture_output=True, timeout=5).returncode == 0:
+            return False                     # routeur joignable : rien a guerir
+    except Exception:
+        pass
+    _rejoin_last[0] = time.time()
+    try:
+        subprocess.run(["networksetup", "-setairportnetwork", "en0", ssid],
+                       capture_output=True, timeout=15)
+        log("rejoin Wi-Fi scene:", ssid)
+        return True
+    except Exception as e:
+        log("rejoin Wi-Fi rate:", e)
+        return False
+
 _deauth_last = {}
 def mango_deauth(mac, cfg):
     """Anti-zombie niveau 1 : deassocie la lampe du Wi-Fi via SSH OpenWrt sur le
@@ -163,6 +194,12 @@ class BaseLamp(threading.Thread):
                     # backoff progressif 3->30 s : marteler une lampe coincee
                     # aggrave son etat (creneau unique) ; on lui laisse de l'air
                     self._fails = getattr(self, "_fails", 0) + 1
+                    if self._fails % 2 == 0:
+                        # d'abord le RESEAU du Mac (saut d'auto-join ?), puis la lampe
+                        try:
+                            rejoin_stage_wifi(load_config())
+                        except Exception:
+                            pass
                     if self._fails % 4 == 0 and self.c.get("type", "tuya") == "tuya":
                         # ~4 echecs d'affilee = profil zombie -> deauth via routeur
                         try:
