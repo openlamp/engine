@@ -79,7 +79,21 @@ def save_config(cfg):
     with _cfg_lock:
         json.dump(cfg, open(CONFIG, "w"), indent=2)
 
-SYNTAX_VERSION = "2.0"   # syntaxe generique = patch d'etat compatible WLED (cf SYNTAXE-MOTEUR.md)
+SYNTAX_VERSION = "2.0"
+
+def _maybe_enable_driver_debug(cfg):
+    """Instrumentation profonde opt-in ("debug": true dans la config) : dump
+    protocolaire tinytuya (paquets, retries, negociation 3.5) vers un log dedie
+    — le microscope quand le chrono d'ack ne suffit pas."""
+    if not (cfg or {}).get("debug"):
+        return
+    import logging
+    dbg = os.path.expanduser(
+        "~/Library/Logs/ElgatoStreamDeck/com.benlab.lamps-debug.log")
+    logging.basicConfig(filename=dbg, level=logging.DEBUG,
+                        format="%(asctime)s %(name)s %(message)s")
+    tinytuya.set_debug(True)
+    log("driver debug ACTIF ->", dbg)   # syntaxe generique = patch d'etat compatible WLED (cf SYNTAXE-MOTEUR.md)
 
 _rejoin_last = [0.0]
 def rejoin_stage_wifi(cfg):
@@ -223,6 +237,9 @@ class BaseLamp(threading.Thread):
                     greet = eng.cfg.get("greet", True) if eng else True
                     if getattr(self, "_greet_fails", 0) >= 3:
                         greet = False
+                    if getattr(self, "eph", False) and getattr(self, "_greeted", False):
+                        greet = False          # ephemere : un seul salut par demarrage
+                    self._greeted = True
                     st = eng.sync_patch(self) if eng else None
                     prev = self.tracked_state()
                     if greet:
@@ -318,7 +335,16 @@ class TuyaLamp(BaseLamp):
         if not ip:
             return False
         d = tinytuya.BulbDevice(self.c["device_id"], ip, self.c["local_key"], version=3.5)
-        d.set_socketPersistent(True)     # LA cle de l'instantane : socket garde ouvert
+        # MODE EPHEMERE par defaut (2026-07-04 19h45, decision Benoit "trop lent
+        # trop instable") : le socket persistant monopolisait l'unique creneau de
+        # connexion de la lampe et fabriquait les pathologies du jour (sessions
+        # zombies, faux acks, tampon desynchronise, 20 renegociations 3.5 en 10
+        # min). En ephemere : une connexion fraiche PAR commande (~150-300 ms),
+        # rien ne pourrit entre deux appuis, le creneau reste libre. L'ancien
+        # comportement : "connection": "persistent" dans la config.
+        self.eph = (self.c.get("connection")
+                    or (load_config().get("connection") or "ephemeral")) == "ephemeral"
+        d.set_socketPersistent(not self.eph)
         d.set_socketTimeout(3)
         d.set_socketRetryLimit(1)
         st = d.status()
@@ -344,6 +370,15 @@ class TuyaLamp(BaseLamp):
         return True
 
     def _heartbeat(self):
+        if getattr(self, "eph", False):
+            # pas de session a entretenir ; sonde TCP legere (1 appel sur 4,
+            # soit ~36 s) pour que la touche Status detecte une lampe eteinte
+            self._hb_tick = getattr(self, "_hb_tick", 0) + 1
+            if self._hb_tick % 4 == 0:
+                ip = (self.c.get("ips") or {}).get(self.c.get("last", ""), "")
+                if ip and not self._probe(ip):
+                    raise RuntimeError("sonde TCP: lampe eteinte ou hors Wi-Fi")
+            return
         self.dev.heartbeat(nowait=False)
 
     def _post_exec_verify(self):
@@ -376,7 +411,12 @@ class TuyaLamp(BaseLamp):
             if dp:
                 out[dp] = v
         if out:
+            t0 = time.monotonic()
             r = d.set_multiple_values(out, nowait=False)
+            ms = (time.monotonic() - t0) * 1000
+            # chrono TOUJOURS logge (instrumentation Benoit 2026-07-04) : rend
+            # visible l'asymetrie radio L1/L2 et le cout reel de chaque ack
+            log(self.name, "ack", "+".join(sorted(caps.keys())), "en %.0f ms" % ms)
             if isinstance(r, dict) and r.get("Error"):
                 raise RuntimeError("set_multiple_values: %s" % r["Error"])
             if not r:
@@ -841,6 +881,7 @@ class Engine:
     only upward link is the on_change hook (see module docstring)."""
     def __init__(self):
         self.cfg = load_config()
+        _maybe_enable_driver_debug(self.cfg)
         self.state = self.cfg.setdefault("state", {"color": "bleu"})
         self.lamps = []
         self.anims = {}          # lampe -> Event d'arret de l'animation en cours
