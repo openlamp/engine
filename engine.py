@@ -305,8 +305,60 @@ class BaseLamp(threading.Thread):
                 except Exception as e2:
                     log(self.name, "retry rate:", e2); self.ok = False
 
+# =====================================================================================
+# AUTOPSIE DU PROTOCOLE TUYA — pourquoi cette classe est si defensive (2026-07-04)
+# =====================================================================================
+# Une journee entiere de debug (banc protocole nu + capture tcpdump routeur + lecture
+# des issues tinytuya) a mis a nu POURQUOI piloter des ampoules Tuya en local est un
+# calvaire. Chaque contournement plus bas repond a une de ces pathologies. Documente
+# ici pour que la douleur serve, et pour justifier le choix de migrer vers WLED
+# (cf WledLamp, l'exact inverse : HTTP en clair, sans etat, sans session).
+#
+# 1. CRENEAU DE CONNEXION UNIQUE. Une lampe Tuya n'accepte qu'UNE connexion TCP a la
+#    fois (port 6668). L'app Smart Life sur le meme reseau LOCAL la prend et nous
+#    l'affame -> "toujours fermer l'app avant". D'ou set_socketPersistent + la lampe
+#    en tete de config, et la fragilite des le moindre concurrent.
+#
+# 2. SESSION 3.5 CHIFFREE QUI SE RENEGOCIE. Le protocole 3.5 ouvre une session avec
+#    echange de cles (GCM). Sous charge, la lampe renegocie en boucle (mesure : ~20
+#    renegos en 10 min dans le log debug). Chaque renego coute 2-10 s -> la "latence
+#    horrible". Le mode ephemere (socket par commande) est PIRE : il paie la renego
+#    a CHAQUE commande (A/B mesure le 2026-07-04 : ephemere perdant net).
+#
+# 3. ACK SANS EXECUTION (faux acquittements). Une session a moitie morte ACQUITTE un
+#    envoi sans l'EXECUTER : le buffer de reponses se desynchronise, l'ack lu
+#    appartient a la commande precedente. Consequence : le moteur croit "orange
+#    applique" alors que la lampe reste verte. SEUL remede : relire la couleur reelle
+#    (verify-after-write, cf _verify_colour) — l'ack ne suffit jamais.
+#
+# 4. REPONSE VIDE = SESSION ZOMBIE. Le socket TCP vit, mais la lampe jette nos paquets
+#    sans repondre (payload b''). Indistinguable d'un succes au niveau TCP. On traite
+#    donc "reponse vide" comme un echec -> reconnexion (cf _dps).
+#
+# 5. CACHE _set_values_check QUI DERIVE. tinytuya cache le dernier etat DP ; en rafale
+#    il ne re-emet pas un DP "inchange" selon lui -> apres un mode:scene, le retour en
+#    mode:colour n'etait plus envoye et la lampe ignorait les couleurs. D'ou l'envoi
+#    EXPLICITE multi-DP a chaque fois (cf _dps), en contournant le cache.
+#
+# 6. PLAFOND DE DEBIT ~4 cmd/s. Au-dela, le firmware lache la session en plein fondu.
+#    D'ou le pacing des fades (max 12 pas, >=250 ms) et la verif a cadence plafonnee.
+#
+# 7. CORRUPTION MEMOIRE FIRMWARE apres ~2 h d'uptime. Documente par les mainteneurs
+#    tinytuya (discussion #443) : la lampe "oublie" sa cle locale, code 914, jusqu'au
+#    power-cycle. Le multicast/broadcast du reseau accelere la corruption. AUCUN
+#    correctif logiciel — d'ou la deauth niveau 1, et in fine le choix materiel WLED.
+#
+# 8. CLE LOCALE VIA LE CLOUD. Pour parler LOCAL a la lampe, il faut d'abord extraire
+#    sa "local_key" du cloud Tuya (compte + API). Local qui depend du cloud : l'inverse
+#    d'un protocole ouvert.
+#
+# VERDICT : Tuya optimise pour enfermer l'utilisateur dans son app/cloud, pas pour le
+# controle local. WLED fait l'exact oppose (cf WledLamp). Ces ampoules restent
+# supportees (materiel deja achete) mais ne sont PAS recommandees pour la scene.
+# =====================================================================================
 class TuyaLamp(BaseLamp):
-    """Socket tinytuya persistant + multi-reseau (une IP par sous-reseau, cf lamp.py)."""
+    """Socket tinytuya persistant + multi-reseau (une IP par sous-reseau, cf lamp.py).
+    Bardee de contournements — voir l'AUTOPSIE ci-dessus pour le pourquoi de chacun."""
     def _probe(self, ip):
         try:
             s = socket.create_connection((ip, 6668), 1.5); s.close(); return True
@@ -639,33 +691,85 @@ class TuyaLamp(BaseLamp):
         log(self.name, "commande inconnue:", cmd)
 
 class WledLamp(BaseLamp):
-    """EXPERIMENTAL — lampes/rubans sous firmware WLED (ESP32), API HTTP JSON locale.
-    Code jamais execute sur du vrai materiel (pas de WLED sous la main) : TESTEURS
-    recherches avant tout — 18036721+Beennnn@users.noreply.github.com.
-    Config : {"name": "...", "type": "wled", "host": "192.168.x.y"}."""
-    def _post(self, payload):
+    """Lampes/rubans sous firmware WLED (ESP8266/ESP32), API HTTP JSON locale.
+
+    L'EXACT OPPOSE de TuyaLamp (cf AUTOPSIE au-dessus de cette classe). Pourquoi WLED
+    est simple et fiable la ou Tuya est un calvaire :
+    - Pas de session : chaque commande est un POST HTTP autonome et sans etat. Rien a
+      "maintenir", donc rien ne peut "pourrir" (vs pathologies Tuya #2, #4, #7).
+    - Pas de creneau unique : WLED accepte plusieurs connexions simultanees (vs #1).
+    - Pas de chiffrement/negociation : requete en clair, reponse immediate (vs #2).
+    - Pas de faux ack : le POST /json/state repond l'etat reel avec {"v":true} — la
+      lampe ne ment pas, donc pas besoin de verify-after-write acrobatique (vs #3).
+    - Pas de cle cloud : rien a extraire, l'IP locale suffit (vs #8).
+    - Debug trivial : on tape http://<host>/ dans un navigateur et on voit tout (vs
+      la capture tcpdump a 22h).
+    Une commande WLED tient en une ligne : POST {"seg":[{"col":[[255,0,0]]}]}.
+
+    Config : {"name": "L1", "type": "wled", "host": "192.168.8.50"} — host = IP OU
+    hostname mDNS (ex "wled-abc123.local"). Options : "segment": N (zone du ruban),
+    "transition": N (fondu x100 ms par commande)."""
+
+    def _url(self, path):
+        return "http://%s%s" % (self.c["host"], path)
+
+    def _post(self, payload, verify=False):
+        # POST autonome, sans session. verify=True -> WLED renvoie l'etat reel
+        # ({"v":true}) qu'on relit pour rafraichir le suivi. Un echec HTTP/reseau
+        # leve -> la boucle de vie reconnecte (mais "reconnecter" = juste re-pinger,
+        # il n'y a pas de session a rouvrir : cf _connect).
+        body = dict(payload)
+        if verify:
+            body["v"] = True
         req = urllib.request.Request(
-            "http://%s/json/state" % self.c["host"],
-            data=json.dumps(payload).encode(),
-            headers={"Content-Type": "application/json"})
-        urllib.request.urlopen(req, timeout=2).read()
+            self._url("/json/state"), data=json.dumps(body).encode(),
+            headers={"Content-Type": "application/json"}, method="POST")
+        last = None
+        for attempt in (1, 2):                 # 1 retry : couvre un timeout Wi-Fi isole
+            try:
+                raw = urllib.request.urlopen(req, timeout=3).read()
+                return json.loads(raw) if verify and raw else None
+            except Exception as e:
+                last = e
+                time.sleep(0.15)
+        raise RuntimeError("WLED POST echec: %s" % last)
 
     def _connect(self):
+        # "Connexion" WLED = simple sanity-check HTTP (pas de session a ouvrir).
         try:
-            urllib.request.urlopen("http://%s/json/info" % self.c["host"], timeout=2).read()
+            info = json.loads(urllib.request.urlopen(
+                self._url("/json/info"), timeout=3).read())
             self.ok = True
-            log(self.name, "(WLED) connectee @", self.c["host"])
+            log(self.name, "(WLED) OK @", self.c["host"],
+                "ver", info.get("ver", "?"), "leds", (info.get("leds") or {}).get("count", "?"))
+            # recupere l'etat reel a la connexion (pour les touches Status)
+            try:
+                self._read_into_tracked(self._status())
+            except Exception:
+                pass
             return True
         except Exception:
             self.ok = False
             return False
 
     def _heartbeat(self):
-        urllib.request.urlopen("http://%s/json/info" % self.c["host"], timeout=2).read()
+        urllib.request.urlopen(self._url("/json/info"), timeout=3).read()
 
     def _status(self):
         return json.loads(urllib.request.urlopen(
-            "http://%s/json/state" % self.c["host"], timeout=2).read())
+            self._url("/json/state"), timeout=3).read())
+
+    def _read_into_tracked(self, st):
+        # WLED dit toujours vrai : on aligne le suivi moteur sur son etat reel.
+        if not isinstance(st, dict):
+            return
+        if "on" in st:
+            self.is_on = bool(st["on"])
+        if "bri" in st:
+            self.bri = max(1, min(100, round(st["bri"] / 2.55)))
+        segs = st.get("seg") or []
+        if segs and segs[0].get("col"):
+            self.rgb = tuple(segs[0]["col"][0][:3])
 
     def _seg(self, seg):
         # config "segment": N -> cette "lampe" du plugin ne pilote qu'une zone du ruban
