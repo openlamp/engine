@@ -160,6 +160,9 @@ class BaseLamp(threading.Thread):
         # photo de l'etat suivi cote moteur (snapshots, blackout/restore)
         return {"on": self.is_on, "bri": self.bri, "rgb": list(self.rgb)}
 
+    def _post_exec_verify(self):
+        pass                                   # surcharge TuyaLamp : verif couleur
+
     def _greet(self):
         """Rainbow welcome sweep (Benoit 2026-07-04): a clearly visible ~2.7 s pass
         through the whole hue wheel, fired on connect / power-on before the sync
@@ -213,7 +216,13 @@ class BaseLamp(threading.Thread):
                 # 1) clignotement "je suis online", 2) etat de sync (cf sync_patch)
                 eng = getattr(self, "engine", None)
                 try:
+                    # anti-boucle (2026-07-04 17h) : sur radio degradee, la rafale
+                    # du rainbow re-tue la session a CHAQUE reconnexion -> boucle
+                    # infinie greet->mort. Apres 3 echecs consecutifs de salut/sync,
+                    # on saute le greet jusqu'a une connexion qui tient.
                     greet = eng.cfg.get("greet", True) if eng else True
+                    if getattr(self, "_greet_fails", 0) >= 3:
+                        greet = False
                     st = eng.sync_patch(self) if eng else None
                     prev = self.tracked_state()
                     if greet:
@@ -230,9 +239,14 @@ class BaseLamp(threading.Thread):
                 except Exception as e:
                     # salut/sync a moitie applique = etat batard (ex: reste blanc
                     # plein) -> on force une reconnexion propre plutot que de laisser
-                    log(self.name, "salut/sync de connexion rate:", e, "-> reconnexion")
+                    self._greet_fails = getattr(self, "_greet_fails", 0) + 1
+                    self._last_err_ts = time.time()
+                    log(self.name, "salut/sync de connexion rate:", e,
+                        "-> reconnexion (echec greet #%d)" % self._greet_fails)
                     self.ok = False
                     continue
+                else:
+                    self._greet_fails = 0
             backoff = 3
             try:
                 cmd = self.q.get(timeout=9)
@@ -263,7 +277,9 @@ class BaseLamp(threading.Thread):
                 continue
             try:
                 self._exec(cmd)
+                self._post_exec_verify()
             except Exception as e:
+                self._last_err_ts = time.time()
                 log(self.name, "erreur:", e, "-> reconnexion + retry")
                 self.ok = False
                 try:
@@ -330,6 +346,16 @@ class TuyaLamp(BaseLamp):
     def _heartbeat(self):
         self.dev.heartbeat(nowait=False)
 
+    def _post_exec_verify(self):
+        # ADAPTATIF (2026-07-04 17h45) : la relecture de verification est ELLE-MEME
+        # du trafic que le firmware supporte mal en cadence soutenue (~1 req/2s max).
+        # Lampe saine depuis 5 min => confiance a l'ack, zero lecture ajoutee.
+        # Souci recent => verification active (c'est la qu'on attrape les faux acks).
+        if time.time() - getattr(self, "_last_err_ts", 0) > 300:
+            return
+        if self.q.empty():                     # matraquage : on ne verifie que la fin
+            self._verify_colour()
+
     def _dps(self, **caps):
         # Envoi EXPLICITE multi-DP en 1 seul paquet, SANS passer par le cache
         # tinytuya (_set_values_check) : avec des envois aveugles le cache derive,
@@ -359,33 +385,60 @@ class TuyaLamp(BaseLamp):
         self._dps(switch=True, mode="colour",
                   colour=d.rgb_to_hexvalue(r, g, b, d.dpset["value_hexformat"]))
         self.is_on = True
-        # VERIFIER-APRES-ECRITURE (bug du 2026-07-04 17h) : une session a moitie
-        # morte peut ACQUITTER sans EXECUTER (l'ack lu appartient a la commande
-        # precedente — tampon desynchronise). L'ack ne suffit donc pas pour les
-        # couleurs : on relit la teinte reelle (lecture drainee) et on renvoie
-        # UNE fois si divergence ; nouvel echec = session pourrie -> exception,
-        # la machinerie reconnexion+retry prend le relais.
+        # verification DIFFEREE (v2 du fix "ack sans execution", 2026-07-04) :
+        # la relecture inline coutait jusqu'a 6 s par appui (drainage a timeout
+        # plein) — inacceptable en live. On note la cible ; la boucle de vie
+        # verifie des que la file est VIDE, a timeout court (cf _verify_colour).
+        # Matraquage de touches => seule la DERNIERE couleur est verifiee.
+        self._want_rgb = (r, g, b)
+        self._verify_tried = False
+
+    def _verify_colour(self):
+        """Verifie (vite) que la derniere couleur voulue est physiquement sur la
+        lampe. Une session a moitie morte peut ACQUITTER sans EXECUTER (tampon
+        de reponses desynchronise, constate 2026-07-04) : on relit la teinte a
+        timeout court, on renvoie UNE fois, sinon on condamne la session."""
+        want = getattr(self, "_want_rgb", None)
+        if not want:
+            return
         import colorsys
+        r, g, b = want
         want_h = round(colorsys.rgb_to_hsv(r / 255.0, g / 255.0, b / 255.0)[0] * 360)
-        for attempt in (1, 2):
-            try:
-                dps = self._status()
-            except Exception:
-                return                      # relecture impossible : on laisse filer
-            cd = dps.get(str(self.dev.dpset.get("colour") or 24), "")
-            if not (isinstance(cd, str) and len(cd) >= 4):
-                return                      # pas de teinte lisible : pas d'avis
-            got_h = int(cd[0:4], 16)
-            diff = abs(got_h - want_h)
-            if min(diff, 360 - diff) <= 10:
-                return                      # la lampe est bien a la couleur voulue
-            if attempt == 1:
-                log(self.name, "couleur non appliquee (lu %d, voulu %d) -> renvoi" %
-                    (got_h, want_h))
-                self._dps(switch=True, mode="colour",
-                          colour=d.rgb_to_hexvalue(r, g, b, d.dpset["value_hexformat"]))
-            else:
-                raise RuntimeError("couleur non appliquee apres renvoi (session pourrie)")
+        d = self.dev
+        d.set_socketTimeout(0.7)               # relecture eclair, pas 3 s
+        try:
+            dps = {}
+            empty = 0
+            for _ in range(5):
+                st = d.status()
+                cur = st.get("dps", {}) if isinstance(st, dict) else {}
+                if not cur:
+                    empty += 1
+                    if dps or empty >= 1:
+                        break
+                    continue
+                dps.update(cur)
+        except Exception:
+            return                              # relecture impossible : pas d'avis
+        finally:
+            d.set_socketTimeout(3)
+        cd = dps.get(str(d.dpset.get("colour") or 24), "")
+        if not (isinstance(cd, str) and len(cd) >= 4):
+            return
+        got_h = int(cd[0:4], 16)
+        diff = abs(got_h - want_h)
+        if min(diff, 360 - diff) <= 10:
+            self._want_rgb = None               # conforme : rien a faire
+            return
+        if not getattr(self, "_verify_tried", False):
+            self._verify_tried = True
+            log(self.name, "couleur non appliquee (lu %d, voulu %d) -> renvoi" %
+                (got_h, want_h))
+            self._dps(switch=True, mode="colour",
+                      colour=d.rgb_to_hexvalue(r, g, b, d.dpset["value_hexformat"]))
+        else:
+            self._want_rgb = None
+            raise RuntimeError("couleur non appliquee apres renvoi (session pourrie)")
 
     def _fade_to(self, rgb_target, pct_target, dur_ms):
         # tt EMULE (natif chez WLED) : interpolation pas-a-pas sur le socket
@@ -791,6 +844,22 @@ class Engine:
         self._start_lamps()
         LocalApi(self).start()   # porte d'entree CLI / MIDI / Bome / autres frontaux
         threading.Thread(target=self._saver, daemon=True).start()
+        threading.Thread(target=self._wifi_keepalive, daemon=True).start()
+
+    def _wifi_keepalive(self):
+        """Battement reseau anti-aging (2026-07-04 18h) : le driver MTK du routeur
+        expulse les clients Wi-Fi SILENCIEUX (~15 min) — et le Mac est silencieux
+        sur en0 des que les lampes churnent (internet passe par le cable). Un ping
+        du routeur toutes les 45 s garde l'association vivante. Cout : nul."""
+        while True:
+            time.sleep(45)
+            host = ((self.cfg.get("router") or {}).get("host"))
+            if host:
+                try:
+                    subprocess.run(["ping", "-c", "1", "-t", "2", host],
+                                   capture_output=True, timeout=6)
+                except Exception:
+                    pass
 
     def _start_lamps(self):
         for l in self.lamps:
