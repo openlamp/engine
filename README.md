@@ -1,7 +1,7 @@
 # OpenLamp Engine
 
 The **core layer** of the OpenLamp family: instant, 100% local control of smart LED
-lamps (Tuya today, WLED experimental), exposed through a stable command contract —
+lamps (**WLED** recommended, Tuya also supported), exposed through a stable command contract —
 **OpenLamp State (OLS)**, a WLED-compatible JSON state patch (see [OLS.md](OLS.md)).
 
 Part of the [OpenLamp](https://github.com/openlamp/openlamp) family:
@@ -36,7 +36,7 @@ Part of the [OpenLamp](https://github.com/openlamp/openlamp) family:
 
 ## One host at a time — the rule
 
-A Tuya lamp accepts **a single local connection**, and every host binds port 8377.
+Every host binds port 8377 (and a Tuya lamp additionally accepts only **one** local connection).
 So run **either** the Stream Deck plugin (it embeds this engine in-process) **or**
 `daemon.py` — never both. Deck sessions → plugin; CLI/MIDI-only sessions → daemon.
 
@@ -66,5 +66,4 @@ keys). Template:
 }
 ```
 
-Made by **BenLab** with the help of Claude. WLED support is written but untested on
-real hardware — testers wanted: open an issue on [lumideck](https://github.com/openlamp/lumideck/issues).
+Made by **BenLab** with the help of Claude. **WLED is the recommended, tested path** (validated on Athom RGBCW bulbs, ~45 ms/command). Feedback: open an issue on [lumideck](https://github.com/openlamp/lumideck/issues).
