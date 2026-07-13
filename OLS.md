@@ -48,7 +48,9 @@ like posting to a WLED device:
 
 `blackout` (off + remember) · `restore` (undo blackout) ·
 `snap:save:<name>` / `snap:<name>` (whole-rig snapshots) ·
-`cycle:<c1,c2…>@ms` · `flash:<color>@ms` · `tempo:<bpm>` · `animstop`
+`cycle:<c1,c2…>@ms` · `flash:<color>@ms` · `tempo:<bpm>` · `animstop` ·
+`tt1:<ms>` (one-shot transition for the **next** command only — a per-action
+*fondu* — vs the persistent `"transition"` config; consumed once, config untouched)
 
 ## 3. Targeting
 
