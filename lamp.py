@@ -7,7 +7,7 @@ brightness presets are separate.
   lamp.py on | off
 Colors (Kelly, most-differentiable first): jaune violet orange bleuclair rouge vert rose bleu
 Multi-network: if the known IP stops answering, the lamp is re-found by its MAC (ARP)
-across every active subnet of the Mac (home box 192.168.1.x, stage Mango 192.168.8.x).
+across every active subnet of the machine (e.g. a home LAN plus a separate stage/travel router).
 If the LumiDeck plugin is running it holds the single local connection each Tuya lamp
 allows, so this CLI routes through the plugin's local API; otherwise it drives directly.
 Callable from Bome: Program Change -> Execute file -> lamp.py <action>.
@@ -15,8 +15,12 @@ Callable from Bome: Program Change -> Execute file -> lamp.py <action>.
 import sys, os, re, json, subprocess, threading
 import tinytuya
 
-# config next to the script — the folder lives in Google Drive and can be moved
-CONFIG = os.path.join(os.path.dirname(os.path.abspath(__file__)), "tuya-lamps.json")
+# config lookup (CLI only; the plugin has its own discovery in engine.py):
+#   1) $LUMIDECK_LAMPS  2) ~/.config/openlamp/tuya-lamps.json  3) next to this script
+_STD_CFG = os.path.expanduser("~/.config/openlamp/tuya-lamps.json")
+CONFIG = (os.environ.get("LUMIDECK_LAMPS")
+          or (_STD_CFG if os.path.isfile(_STD_CFG)
+              else os.path.join(os.path.dirname(os.path.abspath(__file__)), "tuya-lamps.json")))
 COLORS = {"jaune":(255,210,0),"violet":(150,70,170),"orange":(255,125,0),
           "bleuclair":(130,195,255),"rouge":(230,0,40),"vert":(0,200,80),
           "rose":(255,130,170),"bleu":(0,100,200)}
@@ -26,9 +30,9 @@ def norm_mac(s):
     return ":".join(str(int(o,16)) for o in s.lower().split(":"))
 
 def local_subnets():
-    # Every /24 of the Mac's active interfaces: at home the lamp is on the box
-    # (192.168.1.x), on stage it's on the GL.iNet Mango (192.168.8.x). Scanning only
-    # the last known subnet missed the lamp whenever it switched networks.
+    # Every /24 of the machine's active interfaces: a lamp may sit on the home LAN
+    # or, away, on a separate travel-router subnet. Scanning only the last known
+    # subnet missed the lamp whenever it switched networks.
     out = subprocess.run(["ifconfig"], capture_output=True, text=True).stdout
     nets = []
     for m in re.finditer(r"inet (\d+\.\d+\.\d+)\.\d+", out):
@@ -113,7 +117,7 @@ def control(lamp, action, state):
     if lamp.get("ip"):                                    # migrate old single-IP schema
         ips.setdefault(".".join(lamp["ip"].split(".")[:3]), lamp.pop("ip"))
     # 1) known IPs of the Mac's ACTIVE subnets — the last subnet where THIS lamp
-    #    answered first ("last" PER LAMP: L1 can be at home while L2 is on the Mango),
+    #    answered first ("last" PER LAMP: L1 can be on one subnet while L2 is on another),
     # 2) fallback: MAC rediscovery
     last = lamp.get("last")
     subs = ([last] if last in ips else []) + \

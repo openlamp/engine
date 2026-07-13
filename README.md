@@ -13,6 +13,27 @@ Part of the [OpenLamp](https://github.com/openlamp/openlamp) family:
 | Stream Deck frontend | [lumideck](https://github.com/openlamp/lumideck) | keys, dials, live status on an Elgato Stream Deck |
 | MIDI frontend | [openlamp-midi](https://github.com/openlamp/midi) | stage control from physical MIDI controllers |
 
+## Install the `lamp` CLI (PyPI)
+
+The one-shot command-line frontend is published as **`openlamp-lamp`**:
+
+```bash
+pip install openlamp-lamp
+
+lamp rouge            # set colour (keeps brightness)
+lamp bri:60           # brightness 1-100
+lamp veilleuse        # a brightness preset (lueur/veilleuse/tamise/moyen/fort/max)
+lamp on | off
+```
+
+It finds your lamp config (with local keys) from `$LUMIDECK_LAMPS`, else
+`~/.config/openlamp/tuya-lamps.json` (template at the bottom of this README). If the
+LumiDeck plugin/daemon is running, the CLI routes through its local API
+(`127.0.0.1:8377`) for instant response; otherwise it drives the lamps directly.
+
+> Only the CLI (`lamp.py`) ships on PyPI. The engine + headless daemon stay in this
+> repo (they couple to a local file layout — a clean engine package is a follow-up).
+
 ## What's inside
 
 - **`engine.py`** — the engine: one thread per lamp with a *persistent* connection
@@ -65,5 +86,18 @@ keys). Template:
   "sync": {"enabled": true, "state": {"on": true, "col": [0, 100, 200], "bri": 153}}
 }
 ```
+
+## Publishing to PyPI (maintainer)
+
+`openlamp-lamp` publishes via **Trusted Publishing (OIDC)** — no token in the repo.
+`.github/workflows/publish.yml` builds + publishes on each GitHub **Release**. One-time:
+
+1. **PyPI → Add a pending publisher** (<https://pypi.org> → *Publishing*): project
+   `openlamp-lamp`, owner `openlamp`, repo `engine`, workflow `publish.yml`, environment `pypi`.
+2. **GitHub → Settings → Environments → New** → `pypi`.
+3. Bump `version` in `pyproject.toml`, commit, cut a GitHub Release (tag `v0.1.0`) →
+   the workflow builds and publishes. Then `pip install openlamp-lamp` works everywhere.
+
+## Credits
 
 Made by **BenLab** with the help of Claude. **WLED is the recommended, tested path** (validated on Athom RGBCW bulbs, ~45 ms/command). Feedback: open an issue on [lumideck](https://github.com/openlamp/lumideck/issues).
