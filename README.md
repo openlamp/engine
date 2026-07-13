@@ -4,6 +4,8 @@ The **core layer** of the OpenLamp family: instant, 100% local control of smart 
 lamps (**WLED** recommended, Tuya also supported), exposed through a stable command contract —
 **OpenLamp State (OLS)**, a WLED-compatible JSON state patch (see [OLS.md](OLS.md)).
 
+[![PyPI — openlamp-lamp](https://img.shields.io/pypi/v/openlamp-lamp?label=openlamp-lamp&color=3775A9&logo=pypi&logoColor=white)](https://pypi.org/project/openlamp-lamp/)
+
 Part of the [OpenLamp](https://github.com/openlamp/openlamp) family:
 
 | Layer | Repo | Role |
@@ -15,7 +17,7 @@ Part of the [OpenLamp](https://github.com/openlamp/openlamp) family:
 
 ## Install the `lamp` CLI (PyPI)
 
-The one-shot command-line frontend is published as **`openlamp-lamp`**:
+The one-shot command-line frontend is published as **[`openlamp-lamp`](https://pypi.org/project/openlamp-lamp/)** on PyPI:
 
 ```bash
 pip install openlamp-lamp
