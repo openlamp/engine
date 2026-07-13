@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "openlamp-lamp"
-version = "0.1.0"
+version = "0.1.1"
 description = "One-shot CLI to control Tuya smart lamps locally (colour, brightness, on/off) — the OpenLamp/LumiDeck command-line frontend."
 readme = "README.md"
 requires-python = ">=3.9"
