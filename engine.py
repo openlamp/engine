@@ -36,10 +36,11 @@ else:
     # mode dev : ce fichier vit dans scripts/lamps/sd-plugin, lamp.py un cran au-dessus
     HERE = os.path.dirname(os.path.abspath(__file__))
     _FALLBACK = os.path.dirname(HERE)
-# Sur la machine de Benoit, le dossier Drive reste la source de verite
-_DRIVE = os.path.expanduser("~/Library/CloudStorage/GoogleDrive-18036721+Beennnn@users.noreply.github.com"
-                            "/Mon Drive/zic/instruments/Elgato Stream Deck/scripts/lamps")
-LAMPS_DIR = _DRIVE if os.path.isdir(_DRIVE) else _FALLBACK
+# Optional external source-of-truth for lamp.py + tuya-lamps.json, e.g. a synced
+# folder (Google Drive/Dropbox) shared with the CLI. Set OPENLAMP_LAMPS_DIR to that
+# path; otherwise the files bundled next to the plugin/script are used.
+_EXT = os.path.expanduser(os.environ.get("OPENLAMP_LAMPS_DIR", ""))
+LAMPS_DIR = _EXT if (_EXT and os.path.isdir(_EXT)) else _FALLBACK
 CONFIG = os.path.join(LAMPS_DIR, "tuya-lamps.json")
 LOGFILE = os.path.expanduser("~/Library/Logs/ElgatoStreamDeck/com.benlab.lamps.log")
 

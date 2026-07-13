@@ -75,7 +75,9 @@ MIDI frontends (7-bit, 0–127) scale up ×2 — plenty for stage cues.
 
 ## Config
 
-`tuya-lamps.json` sits next to `lamp.py` (never committed — it contains your local
+You can point the engine at an external, synced folder (Google Drive/Dropbox) that
+holds `lamp.py` + `tuya-lamps.json` by setting `OPENLAMP_LAMPS_DIR` to that path;
+otherwise `tuya-lamps.json` sits next to `lamp.py` (never committed — it contains your local
 keys). Template:
 
 ```json
