@@ -8,7 +8,7 @@ version = "0.1.0"
 description = "One-shot CLI to control Tuya smart lamps locally (colour, brightness, on/off) — the OpenLamp/LumiDeck command-line frontend."
 readme = "README.md"
 requires-python = ">=3.9"
-authors = [{ name = "BenLab (Beennnn)", email = "18036721+Beennnn@users.noreply.github.com" }]
+authors = [{ name = "Beennnn", email = "18036721+Beennnn@users.noreply.github.com" }]
 keywords = ["tuya", "smart-lamp", "lighting", "cli", "openlamp", "lumideck", "wled"]
 license = { file = "LICENSE" }
 classifiers = [

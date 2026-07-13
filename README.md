@@ -100,4 +100,4 @@ keys). Template:
 
 ## Credits
 
-Made by **BenLab** with the help of Claude. **WLED is the recommended, tested path** (validated on Athom RGBCW bulbs, ~45 ms/command). Feedback: open an issue on [lumideck](https://github.com/openlamp/lumideck/issues).
+Made by **[@Beennnn](https://github.com/Beennnn)** (**[OpenLamp](https://github.com/openlamp)**) with the help of Claude. **WLED is the recommended, tested path** (validated on Athom RGBCW bulbs, ~45 ms/command). Feedback: open an issue on [lumideck](https://github.com/openlamp/lumideck/issues).
