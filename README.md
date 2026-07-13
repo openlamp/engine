@@ -92,11 +92,10 @@ keys). Template:
 The engine and LumiDeck are developed and tested on this cheap, off-the-shelf rig —
 reproduce it for well under €40 for a two-lamp stereo stage:
 
-- **Bulbs — [Athom E27 RGBCW, WLED-preflashed](https://www.athom.tech)** (model LB10,
-  "7 W Color Bulb"; **ESP32-C3**, RGB + tunable white, ~€13 each). WLED ships already
-  flashed — put the bulb on Wi-Fi and it's auto-discovered. This is the reference bulb
-  every timing figure is measured on (~45 ms/command, the latency-comp floor beatsync
-  uses).
+- **Bulbs — [Athom WLED 7 W Color Bulb](https://www.athom.tech)** (E27, **ESP32-C3**,
+  RGB + tunable white, WLED-preflashed, ~€13 each). WLED ships already flashed — put the
+  bulb on Wi-Fi and it's auto-discovered. This is the reference bulb every timing figure
+  is measured on (~45 ms/command, the latency-comp floor beatsync uses).
 - **Socket / holder — [TobeBright E27 corded lamp holder with inline switch](https://www.amazon.fr/dp/B0DXPQLJCZ)**
   (up to 100 W, a few € on Amazon). Turns a bare bulb into a standalone plug-in stage
   lamp — no fixture required, just screw the bulb in and plug it to mains.
