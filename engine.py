@@ -19,7 +19,7 @@ dispatch so a frontend can refresh whatever it displays. No other engine code
 touches a frontend.
 
 Config: tuya-lamps.json (shared source of truth with every frontend).
-Log: ~/Library/Logs/ElgatoStreamDeck/com.benlab.lamps.log
+Log: ~/Library/Logs/ElgatoStreamDeck/com.openlamp.lamps.log
 """
 import sys, os, json, time, threading, queue, importlib.util, socket
 import subprocess
@@ -42,7 +42,7 @@ else:
 _EXT = os.path.expanduser(os.environ.get("OPENLAMP_LAMPS_DIR", ""))
 LAMPS_DIR = _EXT if (_EXT and os.path.isdir(_EXT)) else _FALLBACK
 CONFIG = os.path.join(LAMPS_DIR, "tuya-lamps.json")
-LOGFILE = os.path.expanduser("~/Library/Logs/ElgatoStreamDeck/com.benlab.lamps.log")
+LOGFILE = os.path.expanduser("~/Library/Logs/ElgatoStreamDeck/com.openlamp.lamps.log")
 
 API_PORT = 8377   # API locale (127.0.0.1 uniquement) — voir LocalApi
 
@@ -90,7 +90,7 @@ def _maybe_enable_driver_debug(cfg):
         return
     import logging
     dbg = os.path.expanduser(
-        "~/Library/Logs/ElgatoStreamDeck/com.benlab.lamps-debug.log")
+        "~/Library/Logs/ElgatoStreamDeck/com.openlamp.lamps-debug.log")
     logging.basicConfig(filename=dbg, level=logging.DEBUG,
                         format="%(asctime)s %(name)s %(message)s")
     tinytuya.set_debug(True)

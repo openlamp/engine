@@ -12,7 +12,7 @@ Tuya lamp allows, and both bind port 8377. Stream Deck for the deck; this daemon
 for CLI/MIDI-only sessions (see run-headless.sh).
 
   python3 daemon.py            # foreground (Ctrl-C to stop)
-  launchd: com.benlab.lumideck-daemon.plist
+  launchd: com.openlamp.lumideck-daemon.plist
 """
 import os, time, importlib.util
 

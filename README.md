@@ -53,7 +53,7 @@ LumiDeck plugin/daemon is running, the CLI routes through its local API
   the ground truth.
 - **`lamp.py`** — the CLI (also Bome-callable): `lamp.py vert`, `lamp.py bri:40`…
   Routes through the local API when a host runs, drives lamps directly otherwise.
-- **`com.benlab.lumideck-daemon.plist`** — launchd autostart for the daemon.
+- **`com.openlamp.lumideck-daemon.plist`** — launchd autostart for the daemon.
 - **`OLS.md`** — the OpenLamp State contract. **`TUYA-KEYS.md`** — how to get your
   lamps' local keys (official Tuya cloud API, one-time).
 
