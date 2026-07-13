@@ -170,6 +170,8 @@ class BaseLamp(threading.Thread):
         self.bri = 60; self.is_on = True
         self.rgb = (0, 100, 200)        # dernier RGB envoye — sert a tt/blackout/snapshot
         self.saved = None               # etat sauve par blackout (restore le rejoue)
+        self._next_tt = None            # fondu one-shot par commande (unites WLED x100 ms) pose par
+                                        # "tt1:N" (un fondu par bouton), sinon None = defaut config
 
     def tracked_state(self):
         # photo de l'etat suivi cote moteur (snapshots, blackout/restore)
@@ -292,6 +294,16 @@ class BaseLamp(threading.Thread):
                 _, holder, ev = cmd                        # photo APRES la file (FIFO)
                 holder[self.name] = self.tracked_state()
                 ev.set()
+                continue
+            # fondu par bouton : "tt1:N" (ms) arme un fondu ONE-SHOT pour la commande
+            # SUIVANTE uniquement, sans toucher la config "transition" persistante.
+            # dispatch() le met en file juste avant la vraie commande ; le driver
+            # (_payload WLED, _fade_to Tuya) le consomme une fois.
+            if isinstance(cmd, str) and cmd.startswith("tt1:"):
+                try:
+                    self._next_tt = max(0, round(int(cmd.split(":", 1)[1] or 0) / 100))
+                except (ValueError, TypeError):
+                    self._next_tt = None
                 continue
             try:
                 self._exec(cmd)
@@ -678,6 +690,10 @@ class TuyaLamp(BaseLamp):
             self.is_on = True; return
         if cmd in COLORS:                                  # couleur : garde l'intensite
             self.rgb = COLORS[cmd]
+            tt = self._next_tt                             # fondu par bouton -> fade Tuya doux, une fois
+            if tt:
+                self._next_tt = None
+                self._fade_to(COLORS[cmd], self.bri, tt * 100); return
             r, g, b = lamp_mod.scale(COLORS[cmd], self.bri)
             self._colour(r, g, b); return
         pct = PALIERS.get(cmd)
@@ -687,6 +703,10 @@ class TuyaLamp(BaseLamp):
             self.bri = pct
             color = self.state.get("color", "bleu")
             self.rgb = COLORS.get(color, COLORS["bleu"])
+            tt = self._next_tt
+            if tt:
+                self._next_tt = None
+                self._fade_to(self.rgb, pct, tt * 100); return
             r, g, b = lamp_mod.scale(self.rgb, pct)
             self._colour(r, g, b); return
         log(self.name, "commande inconnue:", cmd)
@@ -779,8 +799,11 @@ class WledLamp(BaseLamp):
         return seg
 
     def _payload(self, p):
-        # config "transition": N -> fondu (x100 ms) applique a chaque commande
+        # priorite tt : patch explicite > fondu par bouton (one-shot) > defaut config
+        if self._next_tt is not None:
+            p.setdefault("tt", self._next_tt); self._next_tt = None
         if "transition" in self.c:
+            # config "transition": N -> fondu (x100 ms) applique a chaque commande
             p.setdefault("tt", self.c["transition"])
         return p
 
@@ -1172,7 +1195,12 @@ class Engine:
                 self.state["color"] = cmd
             elif cmd.startswith("set:"):                   # avance : memorise aussi la couleur
                 self.state["color"] = cmd.split(":")[1]
+        # fondu par bouton : settings["tt"] (ms) arme un fondu one-shot juste pour cette
+        # pression, mis en file juste avant la commande pour rester ordonne (FIFO) avec elle.
+        tt_ms = (settings or {}).get("tt")
         for l in tgts:
+            if tt_ms not in (None, ""):
+                l.q.put("tt1:%s" % tt_ms)
             l.q.put(cmd)
         # hook frontal (ex: rafraichir les touches Status) ~1,5 s apres, le temps
         # que les commandes en file s'executent. Seul lien moteur -> frontal.
