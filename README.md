@@ -55,7 +55,8 @@ LumiDeck plugin/daemon is running, the CLI routes through its local API
   Routes through the local API when a host runs, drives lamps directly otherwise.
 - **`bin/lamp-bench.py`** — a small bench for WLED tinkerers: firmware/hardware info,
   command **latency** (the round-trip a press pays), and — opt-in — the **command ceiling**
-  (`--ceiling`) the lamp sustains before dropping commands. stdlib only. `lamp-bench.py <ip>`.
+  (`--ceiling`) the lamp sustains before dropping, plus a **conformance check** (`--check`,
+  write commands and read them back). stdlib only. `lamp-bench.py <ip>`.
 - **`com.openlamp.lumideck-daemon.plist`** — launchd autostart for the daemon.
 - **`OLS.md`** — the OpenLamp State contract. **`TUYA-KEYS.md`** — how to get your
   lamps' local keys (official Tuya cloud API, one-time).

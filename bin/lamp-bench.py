@@ -11,6 +11,7 @@ stage tools rate-limit). stdlib only, no deps.
     lamp-bench.py 192.168.8.128        # probe a lamp by IP/host directly
     lamp-bench.py --pings 40           # more latency samples
     lamp-bench.py --ceiling            # ALSO find the command ceiling (stresses the lamp)
+    lamp-bench.py --check              # ALSO run a conformance check (write → read back)
 
 Config: WLED lamps ("type":"wled","host":"<ip>") from $OPENLAMP_LAMPS_DIR/tuya-lamps.json,
 else ~/.config/openlamp/tuya-lamps.json, else next to lamp.py. Only WLED is probed (its
@@ -110,7 +111,40 @@ def ceiling(host, cap=8, per_rate=2.0):
     return cap, True                     # reached the cap with no drop — not pushed further
 
 
-def bench(host, name, pings, do_ceiling):
+def check(host):
+    # Conformance: does the lamp actually APPLY + REFLECT commands? Write a value, read the
+    # state back, verify. Catches non-compliant / buggy firmware. Restores the state after.
+    try:
+        saved = _get(host, "/json/state")
+    except Exception as e:
+        print(f"    ✗ can't read state for the check: {e}"); return
+    def col0(st):
+        return ((st.get("seg") or [{}])[0].get("col") or [[0, 0, 0]])[0][:3]
+    tests = [
+        ("set colour → red", {"on": True, "bri": 200, "seg": [{"col": [[255, 0, 0]]}]},
+         lambda st: col0(st) == [255, 0, 0]),
+        ("set brightness → 128", {"on": True, "bri": 128}, lambda st: abs(st.get("bri", 0) - 128) <= 4),
+        ("turn off", {"on": False}, lambda st: st.get("on") is False),
+        ("turn on", {"on": True}, lambda st: st.get("on") is True),
+        ("crossfade (tt) → blue", {"tt": 8, "seg": [{"col": [[0, 0, 255]]}]}, lambda st: col0(st) == [0, 0, 255]),
+    ]
+    print("    conformance (write → read back):")
+    for label, patch, verify in tests:
+        ok = False
+        try:
+            _post(host, patch); time.sleep(0.2)
+            ok = verify(_get(host, "/json/state"))
+        except Exception:
+            ok = False
+        print(f"      {'✓' if ok else '✗'} {label}")
+    try:                                                # restore what was there before
+        _post(host, {"on": saved.get("on", True), "bri": saved.get("bri", 128),
+                     "seg": [{"col": ((saved.get("seg") or [{}])[0].get("col") or [[0, 100, 200]])}]})
+    except Exception:
+        pass
+
+
+def bench(host, name, pings, do_ceiling, do_check):
     label = f"{name} ({host})" if name else host
     print(f"\n■ {label}")
     inf, err = info(host)
@@ -133,6 +167,8 @@ def bench(host, name, pings, do_ceiling):
         else:
             print(f"    command ceiling: ~{c:.0f} cmd/s sustained (started dropping above that). "
                   f"Stage tools cap at 4.2/s for headroom.")
+    if do_check:
+        check(host)
 
 
 def main(argv=None):
@@ -141,6 +177,7 @@ def main(argv=None):
     ap.add_argument("hosts", nargs="*", help="WLED IP(s)/host(s) to probe; omit to read the config")
     ap.add_argument("--pings", type=int, default=20, help="latency samples per lamp (default 20)")
     ap.add_argument("--ceiling", action="store_true", help="also probe the command ceiling (stresses the lamp)")
+    ap.add_argument("--check", action="store_true", help="also run a conformance check (write commands, read them back; restores state after)")
     args = ap.parse_args(argv)
 
     targets = [(h, None) for h in args.hosts]
@@ -160,7 +197,7 @@ def main(argv=None):
         return 1
     for host, name in targets:
         try:
-            bench(host, name, args.pings, args.ceiling)
+            bench(host, name, args.pings, args.ceiling, args.check)
         except KeyboardInterrupt:
             print("\n  aborted."); break
     print()
