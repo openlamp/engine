@@ -13,7 +13,27 @@ Part of the [OpenLamp](https://github.com/openlamp/openlamp) family:
 | Engine (this repo) | `openlamp/engine` | drivers + dispatcher + local API + daemon + CLI (Python reference) |
 | Engine, JS port | [engine-js](https://github.com/openlamp/engine-js) | same contract on Node/tuyapi — for JS-first environments |
 | Stream Deck frontend | [lumideck](https://github.com/openlamp/lumideck) | keys, dials, live status on an Elgato Stream Deck |
-| MIDI frontend | [openlamp-midi](https://github.com/openlamp/midi) | stage control from physical MIDI controllers |
+| Ableton Live frontend | [live](https://github.com/openlamp/live) | drive lamps from a Live set (emits the wled-midi convention) |
+| MIDI convention | [wled-midi](https://github.com/openlamp/wled-midi) | the MIDI↔WLED spec this engine implements (see `midi.py`) |
+| Ableton Link / tempo | [openlamp-midi](https://github.com/openlamp/midi) | beat / tempo follow (beatsync) |
+
+## MIDI control
+
+The engine is the **reference implementation of the
+[wled-midi](https://github.com/openlamp/wled-midi) convention**. Run
+[`midi.py`](midi.py) to open a virtual MIDI input port (default `OpenLamp`) and drive
+the lamps from any DAW or controller — notes → colours, CC → brightness/effects,
+Program Change → presets, MIDI clock → tempo:
+
+```bash
+python3 midi.py            # opens the "OpenLamp" virtual MIDI port
+```
+
+Any frontend that speaks the convention works: [Ableton](https://github.com/openlamp/live),
+the Stream Deck **MIDI** plugin (`se.trevligaspel.midi`, for scripted sequences), or a
+hardware pad/fader controller. (This replaces the old `openlamp-midi` `lumideck-midi`
+bridge — the MIDI control path now lives here; `openlamp-midi` keeps the Ableton Link
+tempo-follow.)
 
 ## Install the `lamp` CLI (PyPI)
 
