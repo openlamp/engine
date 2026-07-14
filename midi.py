@@ -17,9 +17,11 @@ Model (wled-midi v0.2):
   - PROGRAM CHANGE recalls a WLED preset (ps = n+1).
   - MIDI CLOCK derives tempo.
 
-Beat (note 72) toggles a per-channel beat flag and emits beat:on/off; the actual
-on-the-beat pulsing is done by the tempo layer (openlamp-midi beatsync). In-process
-dispatch (skipping loopback HTTP) is a future optimisation.
+Beat (note 72) toggles a per-channel beat flag; the pulsing is driven here from the
+incoming MIDI clock (accent on each beat, trough between, modulating the look's
+brightness). Enable clock output to the port in your DAW. A richer Link-based version
+(phase-accurate downbeat accent via openlamp-midi beatsync) is a future refinement.
+In-process dispatch (skipping loopback HTTP) is another future optimisation.
 
 Run:  python3 midi.py            (Ctrl-C to quit)
 Config: midi-mapping.json (auto-written next to this file; remappable).
@@ -58,8 +60,10 @@ DEFAULT = {
            "5": "fx", "6": "sx", "7": "ix", "8": "pal"},
     "programs": [],              # empty -> Program Change n maps to WLED preset n+1
     "velocity_to_bri": False,    # true -> a look note-on also sets brightness from velocity
-    "clock_tempo": False,
+    "clock_tempo": False,        # true -> report BPM from MIDI clock as tempo:<bpm>
     "clock_channel": 1,
+    "beat_width_ticks": 6,       # ticks (of 24/beat) the accent lasts before the trough
+    "beat_base_ratio": 0.25,     # trough brightness = ratio x the look's set brightness
 }
 
 
@@ -90,6 +94,7 @@ class Bridge:
         self.sat = {}                 # per-channel saturation
         self.fx = {}                  # per-channel WLED effect {fx,sx,ix,pal}
         self.beat = {}                # per-channel beat-mode on/off
+        self.bri = {}                 # per-channel set brightness (for beat pulse + settle)
 
     def _target(self, chan):
         chans = self.cfg.get("channels")
@@ -137,13 +142,15 @@ class Bridge:
             elif m == "beat":
                 st = not self.beat.get(chan, False)  # toggle per channel
                 self.beat[chan] = st
-                # beat:on/off -> the tempo layer (openlamp-midi beatsync) pulses the look.
-                send("beat:on" if st else "beat:off", target)
+                print("  ch->%s  beat %s" % (target or "all", "on" if st else "off"))
+                if not st:                           # leaving beat mode: settle brightness
+                    send('{"bri":%d}' % self.bri.get(chan, 255), target)
 
     def on_cc(self, num, val, target, chan):
         kind = self.cfg["cc"].get(str(num))
         if kind == "bri":
-            send('{"bri":%d}' % round(val / 127 * 255), target)
+            self.bri[chan] = round(val / 127 * 255)
+            send('{"bri":%d}' % self.bri[chan], target)
         elif kind == "cct":
             send('{"cct":%d}' % round(val / 127 * 255), target)
         elif kind in ("hue", "sat"):
@@ -184,19 +191,33 @@ class Bridge:
         send(cmd, target)
 
     def on_clock(self):
-        if not self.cfg.get("clock_tempo"):
-            return
-        now = time.monotonic()
         self.clock_ticks += 1
-        if self.clock_ticks % 24 != 0:                # 24 ticks = 1 beat
-            return
-        if self.clock_t0 is not None:
-            bpm = round(60.0 / (now - self.clock_t0))
-            if 20 <= bpm <= 300 and bpm != self.last_bpm:
-                self.last_bpm = bpm
-                tgt = self._target(self.cfg.get("clock_channel", 1)) or []
-                send("tempo:%d" % max(20, min(120, bpm)), tgt)
-        self.clock_t0 = now
+        pos = self.clock_ticks % 24                    # 24 ticks = 1 beat
+
+        # Beat modifier (note 72): pulse each beat-mode channel — accent on the beat,
+        # trough between — by modulating the look's brightness. Needs MIDI clock flowing.
+        if any(self.beat.values()):
+            width = self.cfg.get("beat_width_ticks", 6)
+            ratio = self.cfg.get("beat_base_ratio", 0.25)
+            for chan, on in self.beat.items():
+                if not on:
+                    continue
+                base = self.bri.get(chan, 255)
+                if pos == 0:                           # downbeat of this beat: accent
+                    send('{"bri":%d}' % base, self._target(chan) or [])
+                elif pos == width:                     # shortly after: trough
+                    send('{"bri":%d}' % max(1, round(base * ratio)), self._target(chan) or [])
+
+        # Tempo derivation (optional): report BPM once per beat.
+        if self.cfg.get("clock_tempo") and pos == 0:
+            now = time.monotonic()
+            if self.clock_t0 is not None:
+                bpm = round(60.0 / (now - self.clock_t0))
+                if 20 <= bpm <= 300 and bpm != self.last_bpm:
+                    self.last_bpm = bpm
+                    tgt = self._target(self.cfg.get("clock_channel", 1)) or []
+                    send("tempo:%d" % max(20, min(120, bpm)), tgt)
+            self.clock_t0 = now
 
     def dispatch(self, msg):
         status = msg[0]
