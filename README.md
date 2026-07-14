@@ -12,7 +12,7 @@ Part of the [OpenLamp](https://github.com/openlamp/openlamp) family:
 |---|---|---|
 | Engine (this repo) | `openlamp/engine` | drivers + dispatcher + local API + daemon + CLI (Python reference) |
 | Engine, JS port | [engine-js](https://github.com/openlamp/engine-js) | same contract on Node/tuyapi — for JS-first environments |
-| Stream Deck frontend | [lumideck](https://github.com/openlamp/lumideck) | keys, dials, live status on an Elgato Stream Deck |
+| Stream Deck frontend | **LumiDeck** (commercial) | keys, dials, live status on an Elgato Stream Deck |
 | Ableton Live frontend | [live](https://github.com/openlamp/live) | drive lamps from a Live set (emits the wled-midi convention) |
 | MIDI convention | [wled-midi](https://github.com/openlamp/wled-midi) | the MIDI↔WLED spec this engine implements (see `midi.py`) |
 | Ableton Link / tempo | [openlamp-midi](https://github.com/openlamp/midi) | beat / tempo follow (beatsync) |
@@ -141,4 +141,4 @@ reproduce it for well under €40 for a two-lamp stereo stage:
 
 ## Credits
 
-Made by **[@Beennnn](https://github.com/Beennnn)** (**[OpenLamp](https://github.com/openlamp)**) with the help of Claude. **WLED is the recommended, tested path** (validated on Athom RGBCW bulbs, ~45 ms/command). Feedback: open an issue on [lumideck](https://github.com/openlamp/lumideck/issues).
+Made by **[@Beennnn](https://github.com/Beennnn)** (**[OpenLamp](https://github.com/openlamp)**) with the help of Claude. **WLED is the recommended, tested path** (validated on Athom RGBCW bulbs, ~45 ms/command). Feedback: open an issue on [engine](https://github.com/openlamp/engine/issues).
