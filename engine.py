@@ -967,7 +967,8 @@ class LocalApi(threading.Thread):
                                      "fx", "sx", "ix", "pal"],
                             "extensions": ["scene", "music"],
                             "commands": ["blackout", "restore", "snap:save:<nom>",
-                                          "snap:<nom>"],
+                                          "snap:<nom>", "beat:toggle", "beat:off",
+                                          "beat:<link|midi>[:action[:colors[:sub]]]"],
                             "aliases": ["<couleur>", "<palier>", "bri:N", "set:c:p",
                                          "white:b:t", "scene:nom", "preset:N",
                                          "mode:music", "countdown:min", "wled:fx:...",
@@ -1013,6 +1014,7 @@ class Engine:
         self.state = self.cfg.setdefault("state", {"color": "bleu"})
         self.lamps = []
         self.anims = {}          # lampe -> Event d'arret de l'animation en cours
+        self._beat_proc = None   # subprocess beatsync (beat:on) — None si arrete
         self.on_change = None    # hook frontal, appele ~1,5 s apres un dispatch
         self._dirty = False
         self._start_lamps()
@@ -1131,6 +1133,73 @@ class Engine:
             return bool(tgts) and all(l.ok for l in tgts)
         return False
 
+    # ----- beat-sync (Ableton Link / MIDI clock via openlamp-midi beatsync) -----
+    # beat:on|off|toggle supervises the standalone `beatsync` helper as a subprocess.
+    # beatsync follows an external tempo source (Ableton Link by default) and drives
+    # THIS engine's local API on the beat — latency-anticipated, downbeat accent. Kept
+    # as a subprocess ON PURPOSE: the aalink / python-rtmidi deps stay out of the engine
+    # core (only needed when you actually beat), matching openlamp-midi's standalone design.
+    def _beatsync_cmd(self):
+        """Base command to launch beatsync: explicit cfg > installed module > sibling repo."""
+        bc = self.cfg.get("beat") or {}
+        if bc.get("cmd"):
+            return list(bc["cmd"])
+        if importlib.util.find_spec("beatsync"):
+            return [sys.executable, "-m", "beatsync"]
+        sibling = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                               "..", "midi", "beatsync.py")
+        if os.path.exists(sibling):
+            return [sys.executable, os.path.abspath(sibling)]
+        log("beat: beatsync introuvable — `pip install \"openlamp-midi[link]\"` "
+            "ou renseigner cfg beat.cmd")
+        return None
+
+    def _beat_running(self):
+        return self._beat_proc is not None and self._beat_proc.poll() is None
+
+    def _start_beat(self, spec, settings):
+        """spec = "toggle" | "on" | "<source>[:action[:colors[:sub]]]" (grammaire alignee
+        sur LumiDeck ; source = link|midi ; defauts en cfg beat.*)."""
+        base = self._beatsync_cmd()
+        if not base:
+            return False
+        self._stop_beat()                          # repart propre si deja lance
+        bc = self.cfg.get("beat") or {}
+        parts = [] if spec in ("toggle", "on", "") else spec.split(":")
+        source = parts[0] if parts else bc.get("source", "link")
+        action = parts[1] if len(parts) > 1 else bc.get("action", "pulse")
+        colors = parts[2] if len(parts) > 2 else bc.get("colors")
+        sub = parts[3] if len(parts) > 3 else bc.get("sub")
+        args = ["--source", source, "--action", action,
+                "--api", "http://127.0.0.1:%d" % API_PORT]
+        if bc.get("accent", True):
+            args.append("--accent")
+        if colors:
+            args += ["--colors", str(colors)]
+        if sub:
+            args += ["--sub", str(sub)]
+        names = (settings or {}).get("lamps") or []   # ciblage engine -> --lamps
+        if names:
+            args += ["--lamps", ",".join(names)]
+        try:
+            self._beat_proc = subprocess.Popen(base + args)
+        except Exception as e:
+            log("beat: echec du lancement:", e)
+            return False
+        log("beat: on ->", " ".join(base + args))
+        return True
+
+    def _stop_beat(self):
+        p = self._beat_proc
+        self._beat_proc = None
+        if p and p.poll() is None:
+            p.terminate()
+            try:
+                p.wait(2)
+            except Exception:
+                p.kill()
+            log("beat: off")
+
     def targets(self, settings):
         """Lampes visees. settings.lamps = noms de lampes OU DE GROUPES ; vide = toutes.
         Les groupes sont definis dans la config : "groups": {"front": ["L1"], ...}."""
@@ -1185,6 +1254,18 @@ class Engine:
                 else:
                     l.q.put({"on": False})
             return bool(tgts) and all(l.ok for l in tgts)
+        # beat-sync : suivi de tempo externe (Ableton Link / MIDI clock) via beatsync.
+        # Grammaire alignee sur LumiDeck : beat:off|stop | beat:toggle |
+        # beat:<source>[:action[:colors[:sub]]]  (beat / beat:on == beat:link:pulse)
+        if isinstance(cmd, str) and (cmd == "beat" or cmd.startswith("beat:")):
+            rest = cmd.split(":", 1)[1] if ":" in cmd else "toggle"
+            if rest in ("off", "stop") or (rest == "toggle" and self._beat_running()):
+                self._stop_beat()
+                return True
+            return self._start_beat(rest, settings)    # "toggle"/"on"/"<source>[:...]"
+        # commandes "tout couper" : arretent aussi le beat en cours
+        if isinstance(cmd, str) and cmd in ("off", "blackout", "animstop"):
+            self._stop_beat()
         if isinstance(cmd, str) and \
            (cmd == "animstop" or cmd.startswith(("cycle:", "flash:", "tempo:"))):
             return self._anim_cmd(cmd, settings)
