@@ -6,7 +6,13 @@ OpenLamp State (OLS = WLED-compatible JSON patch) commands, per the
 github.com/openlamp/wled-midi convention (v0.2). It POSTs to the engine's local API
 (127.0.0.1:8377/cmd); the engine owns the persistent device connections.
 
-Model (wled-midi v0.2):
+Two modes (config "mode"):
+  - "group" (default) — CHANNEL = a lamp group; NOTES/CC/PC as below. MIDI-1.0-native.
+  - "mpe" — CHANNEL = a per-note voice: play the lamps expressively. Note-on lights a
+    voice (pitch -> base hue), channel pressure -> brightness, CC74 slide -> saturation,
+    pitch-bend -> hue shift. See wled-midi SPEC "MPE profile".
+
+Group-mode model (wled-midi v0.3):
   - CHANNEL = a lamp group/target (1-16 per port; channel 1 = "all").
   - NOTES are organised in zones:
       LOOKS (60-68)      what the lamp SHOWS, mutually exclusive: 8 colours + effect.
@@ -64,6 +70,15 @@ DEFAULT = {
     "clock_channel": 1,
     "beat_width_ticks": 6,       # ticks (of 24/beat) the accent lasts before the trough
     "beat_base_ratio": 0.25,     # trough brightness = ratio x the look's set brightness
+    # "group" (default, channel = lamp group) or "mpe" (channel = per-note voice —
+    # play the lamps expressively: pressure->bri, slide CC74->saturation, bend->hue).
+    "mode": "group",
+    "mpe": {
+        "master": 1,             # MPE master channel (global; ignored for per-voice)
+        "first_member": 2,       # member channels start here (voices)
+        "voices": ["L1", "L2", "L3", "L4"],   # lamp pool, one per active voice
+        "bend_hue_range": 0.5,   # pitch-bend at full = this much hue shift (0..1 spectrum)
+    },
 }
 
 
@@ -95,6 +110,7 @@ class Bridge:
         self.fx = {}                  # per-channel WLED effect {fx,sx,ix,pal}
         self.beat = {}                # per-channel beat-mode on/off
         self.bri = {}                 # per-channel set brightness (for beat pulse + settle)
+        self.voices = {}              # MPE mode: member-channel -> voice {lamp,base,hue,sat}
 
     def _target(self, chan):
         chans = self.cfg.get("channels")
@@ -219,8 +235,72 @@ class Bridge:
                     send("tempo:%d" % max(20, min(120, bpm)), tgt)
             self.clock_t0 = now
 
+    # ----- MPE mode: channel = per-note voice (pressure->bri, CC74->sat, bend->hue) -----
+
+    def _mpe_voice_lamp(self, chan):
+        mpe = self.cfg.get("mpe", {})
+        pool = mpe.get("voices") or ["L1", "L2", "L3", "L4"]
+        first = mpe.get("first_member", 2)
+        return pool[(chan - first) % len(pool)]
+
+    def _mpe_send_col(self, chan):
+        v = self.voices.get(chan)
+        if not v:
+            return
+        r, g, b = colorsys.hsv_to_rgb(v["hue"] % 1.0, v["sat"], 1.0)
+        send('{"col":[%d,%d,%d]}' % (round(r*255), round(g*255), round(b*255)), [v["lamp"]])
+
+    def on_mpe_note_on(self, chan, note, vel):
+        lamp = self._mpe_voice_lamp(chan)
+        base = (note % 12) / 12.0                      # pitch class -> base hue
+        self.voices[chan] = {"lamp": lamp, "base": base, "hue": base, "sat": 1.0}
+        r, g, b = colorsys.hsv_to_rgb(base, 1.0, 1.0)
+        send('{"on":true,"col":[%d,%d,%d],"bri":%d}' % (
+            round(r*255), round(g*255), round(b*255), round(vel / 127 * 255)), [lamp])
+
+    def on_mpe_note_off(self, chan):
+        v = self.voices.pop(chan, None)
+        if v:
+            send('{"bri":0}', [v["lamp"]])
+
+    def on_mpe_pressure(self, chan, val):              # Z axis -> brightness
+        v = self.voices.get(chan)
+        if v:
+            send('{"bri":%d}' % round(val / 127 * 255), [v["lamp"]])
+
+    def on_mpe_slide(self, chan, val):                 # Y axis (CC74) -> saturation
+        v = self.voices.get(chan)
+        if v:
+            v["sat"] = val / 127.0
+            self._mpe_send_col(chan)
+
+    def on_mpe_bend(self, chan, lsb, msb):             # X axis -> hue shift
+        v = self.voices.get(chan)
+        if v:
+            bend = ((msb << 7) | lsb) - 8192           # -8192..+8191
+            rng = self.cfg.get("mpe", {}).get("bend_hue_range", 0.5)
+            v["hue"] = v["base"] + (bend / 8192.0) * rng
+            self._mpe_send_col(chan)
+
+    def dispatch_mpe(self, msg):
+        typ, chan = msg[0] & 0xF0, (msg[0] & 0x0F) + 1
+        if chan == self.cfg.get("mpe", {}).get("master", 1):
+            return                                     # master channel: global, ignored here
+        if typ == 0x90 and msg[2] > 0:
+            self.on_mpe_note_on(chan, msg[1], msg[2])
+        elif typ == 0x80 or (typ == 0x90 and msg[2] == 0):
+            self.on_mpe_note_off(chan)
+        elif typ == 0xD0:                              # channel pressure
+            self.on_mpe_pressure(chan, msg[1])
+        elif typ == 0xB0 and msg[1] == 74:             # CC74 slide / timbre
+            self.on_mpe_slide(chan, msg[2])
+        elif typ == 0xE0:                              # pitch bend
+            self.on_mpe_bend(chan, msg[1], msg[2])
+
     def dispatch(self, msg):
         status = msg[0]
+        if self.cfg.get("mode") == "mpe":
+            self.dispatch_mpe(msg); return
         if status == 0xF8:                            # clock -> global tempo
             self.on_clock(); return
         typ, chan = status & 0xF0, (status & 0x0F) + 1
