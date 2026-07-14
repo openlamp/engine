@@ -1,6 +1,6 @@
 # Getting your Tuya lamps' local keys (one-time setup)
 
-LumiDeck drives your lamps **100% locally** — but the Tuya protocol encrypts local
+OpenLamp drives your lamps **100% locally** — but the Tuya protocol encrypts local
 traffic with a per-device `local_key`. You fetch each key **once**, through Tuya's
 own official cloud API, then the cloud is never needed again.
 
@@ -59,9 +59,9 @@ Poll local devices?  → Y
 The wizard writes **`devices.json`** in the current folder — it contains, for each
 lamp: `id` (device_id), `key` (**the local_key you're after**), name and more.
 
-## Step 5 — Put the keys into LumiDeck
+## Step 5 — Put the keys into OpenLamp
 
-Open any LumiDeck key in the Stream Deck app → **⚙️ Lamp configuration** → edit the
+Open any OpenLamp key in the Stream Deck app → **⚙️ Lamp configuration** → edit the
 JSON — one entry per lamp:
 
 ```json
@@ -75,7 +75,7 @@ JSON — one entry per lamp:
 ```
 
 - `mac`: shown by `python3 -m tinytuya scan`, or in your router's client list —
-  it lets LumiDeck **re-find the lamp automatically** when its IP changes.
+  it lets OpenLamp **re-find the lamp automatically** when its IP changes.
 - `ips`: one entry per network you use (home, travel/stage router…).
 
 Click **Save + reload connections** — your lamps should blink their welcome. 🎉

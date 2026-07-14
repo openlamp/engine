@@ -1159,7 +1159,7 @@ class Engine:
 
     def _start_beat(self, spec, settings):
         """spec = "toggle" | "on" | "<source>[:action[:colors[:sub]]]" (grammaire alignee
-        sur LumiDeck ; source = link|midi ; defauts en cfg beat.*)."""
+        sur OpenLamp ; source = link|midi ; defauts en cfg beat.*)."""
         base = self._beatsync_cmd()
         if not base:
             return False
@@ -1255,7 +1255,7 @@ class Engine:
                     l.q.put({"on": False})
             return bool(tgts) and all(l.ok for l in tgts)
         # beat-sync : suivi de tempo externe (Ableton Link / MIDI clock) via beatsync.
-        # Grammaire alignee sur LumiDeck : beat:off|stop | beat:toggle |
+        # Grammaire alignee sur OpenLamp : beat:off|stop | beat:toggle |
         # beat:<source>[:action[:colors[:sub]]]  (beat / beat:on == beat:link:pulse)
         if isinstance(cmd, str) and (cmd == "beat" or cmd.startswith("beat:")):
             rest = cmd.split(":", 1)[1] if ":" in cmd else "toggle"

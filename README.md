@@ -12,7 +12,6 @@ Part of the [OpenLamp](https://github.com/openlamp/openlamp) family:
 |---|---|---|
 | Engine (this repo) | `openlamp/engine` | drivers + dispatcher + local API + daemon + CLI (Python reference) |
 | Engine, JS port | [engine-js](https://github.com/openlamp/engine-js) | same contract on Node/tuyapi — for JS-first environments |
-| Stream Deck frontend | **LumiDeck** (commercial) | keys, dials, live status on an Elgato Stream Deck |
 | Ableton Live frontend | [live](https://github.com/openlamp/live) | drive lamps from a Live set (emits the wled-midi convention) |
 | MIDI convention | [wled-midi](https://github.com/openlamp/wled-midi) | the MIDI↔WLED spec this engine implements (see `midi.py`) |
 | Ableton Link / tempo | [openlamp-midi](https://github.com/openlamp/midi) | beat / tempo follow (beatsync) |
@@ -31,7 +30,7 @@ python3 midi.py            # opens the "OpenLamp" virtual MIDI port
 
 Any frontend that speaks the convention works: [Ableton](https://github.com/openlamp/live),
 the Stream Deck **MIDI** plugin (`se.trevligaspel.midi`, for scripted sequences), or a
-hardware pad/fader controller. (This replaces the old `openlamp-midi` `lumideck-midi`
+hardware pad/fader controller. (This replaces the old `openlamp-midi`
 bridge — the MIDI control path now lives here; `openlamp-midi` keeps the Ableton Link
 tempo-follow.)
 
@@ -48,9 +47,9 @@ lamp veilleuse        # a brightness preset (lueur/veilleuse/tamise/moyen/fort/m
 lamp on | off
 ```
 
-It finds your lamp config (with local keys) from `$LUMIDECK_LAMPS`, else
+It finds your lamp config (with local keys) from `$OPENLAMP_LAMPS`, else
 `~/.config/openlamp/tuya-lamps.json` (template at the bottom of this README). If the
-LumiDeck plugin/daemon is running, the CLI routes through its local API
+OpenLamp daemon is running, the CLI routes through its local API
 (`127.0.0.1:8377`) for instant response; otherwise it drives the lamps directly.
 
 > Only the CLI (`lamp.py`) ships on PyPI. The engine + headless daemon stay in this
@@ -77,7 +76,7 @@ LumiDeck plugin/daemon is running, the CLI routes through its local API
   command **latency** (the round-trip a press pays), and — opt-in — the **command ceiling**
   (`--ceiling`) the lamp sustains before dropping, plus a **conformance check** (`--check`,
   write commands and read them back). stdlib only. `lamp-bench.py <ip>`.
-- **`com.openlamp.lumideck-daemon.plist`** — launchd autostart for the daemon.
+- **`com.openlamp.daemon.plist`** — launchd autostart for the daemon.
 - **`OLS.md`** — the OpenLamp State contract. **`TUYA-KEYS.md`** — how to get your
   lamps' local keys (official Tuya cloud API, one-time).
 
@@ -117,7 +116,7 @@ keys). Template:
 
 ## Test hardware (budget setup)
 
-The engine and LumiDeck are developed and tested on this cheap, off-the-shelf rig —
+The engine is developed and tested on this cheap, off-the-shelf rig —
 reproduce it for well under €40 for a two-lamp stereo stage:
 
 - **Bulbs — [Athom WLED 7 W Color Bulb](https://www.athom.tech)** (E27, **ESP32-C3**,

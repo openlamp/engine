@@ -13,6 +13,6 @@ import socket,sys
 s=socket.socket(); s.settimeout(1)
 sys.exit(0 if s.connect_ex(("127.0.0.1",8377))==0 else 1)
 PYCHK
-echo "Starting the LumiDeck engine daemon (headless). Ctrl-C to stop."
-echo "Then use: lamp.py <color>  or the MIDI overlay (../midi-bridge/lumideck_midi.py)"
+echo "Starting the OpenLamp engine daemon (headless). Ctrl-C to stop."
+echo "Then use: lamp.py <color>  or the MIDI overlay (openlamp-midi)"
 exec "$PY" "$HERE/daemon.py"

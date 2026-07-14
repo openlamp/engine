@@ -1,14 +1,14 @@
 # OpenLamp State (OLS) — a WLED-compatible lamp-state protocol
 
-**Version 2.0 · Status: draft, implemented in LumiDeck**
+**Version 2.0 · Status: draft, implemented in OpenLamp**
 
-OLS is the command language of the LumiDeck engine. Rather than inventing a new
+OLS is the command language of the OpenLamp engine. Rather than inventing a new
 schema, OLS **adopts the de-facto standard of the maker world**: the
 [WLED JSON state API](https://kno.wled.ge/interfaces/json-api/) — and extends it
 where cheap consumer lamps (Tuya) need it.
 
 > OLS is *WLED-compatible*. WLED is an independent open-source project; OLS and
-> LumiDeck are not affiliated with or endorsed by the WLED project, Tuya Inc.,
+> OpenLamp are not affiliated with or endorsed by the WLED project, Tuya Inc.,
 > or Elgato.
 
 ## 1. The model: a state **patch**

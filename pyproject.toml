@@ -5,11 +5,11 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "openlamp-lamp"
 version = "0.1.2"
-description = "One-shot CLI to control Tuya smart lamps locally (colour, brightness, on/off) — the OpenLamp/LumiDeck command-line frontend."
+description = "One-shot CLI to control Tuya smart lamps locally (colour, brightness, on/off) — the OpenLamp command-line frontend."
 readme = "README.md"
 requires-python = ">=3.9"
 authors = [{ name = "Beennnn", email = "18036721+Beennnn@users.noreply.github.com" }]
-keywords = ["tuya", "smart-lamp", "lighting", "cli", "openlamp", "lumideck", "wled"]
+keywords = ["tuya", "smart-lamp", "lighting", "cli", "openlamp", "wled"]
 license = { file = "LICENSE" }
 classifiers = [
     "Programming Language :: Python :: 3",
@@ -18,7 +18,7 @@ classifiers = [
     "Environment :: Console",
     "Topic :: Home Automation",
 ]
-# tinytuya = local Tuya control. If the LumiDeck plugin/daemon is running the CLI
+# tinytuya = local Tuya control. If the OpenLamp daemon is running the CLI
 # routes through its local API (127.0.0.1:8377) instead; otherwise it drives the
 # lamps directly with tinytuya.
 dependencies = ["tinytuya>=1.13"]
@@ -29,7 +29,7 @@ Source = "https://github.com/openlamp/engine"
 Issues = "https://github.com/openlamp/engine/issues"
 "OpenLamp umbrella" = "https://github.com/openlamp"
 
-# The CLI command. Config lookup: $LUMIDECK_LAMPS, then ~/.config/openlamp/tuya-lamps.json.
+# The CLI command. Config lookup: $OPENLAMP_LAMPS, then ~/.config/openlamp/tuya-lamps.json.
 [project.scripts]
 lamp = "lamp:main"
 

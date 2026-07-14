@@ -8,7 +8,7 @@ brightness presets are separate.
 Colors (Kelly, most-differentiable first): jaune violet orange bleuclair rouge vert rose bleu
 Multi-network: if the known IP stops answering, the lamp is re-found by its MAC (ARP)
 across every active subnet of the machine (e.g. a home LAN plus a separate stage/travel router).
-If the LumiDeck plugin is running it holds the single local connection each Tuya lamp
+If the OpenLamp daemon is running it holds the single local connection each Tuya lamp
 allows, so this CLI routes through the plugin's local API; otherwise it drives directly.
 Callable from Bome: Program Change -> Execute file -> lamp.py <action>.
 """
@@ -16,9 +16,9 @@ import sys, os, re, json, subprocess, threading
 import tinytuya
 
 # config lookup (CLI only; the plugin has its own discovery in engine.py):
-#   1) $LUMIDECK_LAMPS  2) ~/.config/openlamp/tuya-lamps.json  3) next to this script
+#   1) $OPENLAMP_LAMPS  2) ~/.config/openlamp/tuya-lamps.json  3) next to this script
 _STD_CFG = os.path.expanduser("~/.config/openlamp/tuya-lamps.json")
-CONFIG = (os.environ.get("LUMIDECK_LAMPS")
+CONFIG = (os.environ.get("OPENLAMP_LAMPS")
           or (_STD_CFG if os.path.isfile(_STD_CFG)
               else os.path.join(os.path.dirname(os.path.abspath(__file__)), "tuya-lamps.json")))
 COLORS = {"jaune":(255,210,0),"violet":(150,70,170),"orange":(255,125,0),
