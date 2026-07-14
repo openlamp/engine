@@ -81,8 +81,10 @@ def latency(host, n):
 
 def ceiling(host, cap=8, per_rate=2.0):
     # Ramp the command rate and watch for the first drops. Gentle + bails at the first
-    # sign of trouble — we approach the ceiling, we don't hammer past it (that reboots the ESP).
-    print("    ceiling probe (this stresses the lamp — Ctrl-C to abort)…")
+    # sign of trouble — we approach the ceiling, we don't hammer past it (that reboots the
+    # ESP). Returns (last_good_rate, hit_cap): hit_cap=True means we reached the safety cap
+    # with NO drop, so the real ceiling is higher but deliberately left un-probed.
+    print("    ceiling probe (safety-capped — this stresses the lamp; Ctrl-C to abort)…")
     last_ok = 0.0
     r = 2.0
     while r <= cap:
@@ -102,10 +104,10 @@ def ceiling(host, cap=8, per_rate=2.0):
         drop_pct = 100.0 * fails / max(1, sent)
         print(f"      {r:.1f}/s → {sent} sent, {fails} dropped ({drop_pct:.0f}%)")
         if drop_pct > 10.0:
-            break                        # first real trouble → stop, don't push further
+            return last_ok, False        # first real trouble → stop, don't push further
         last_ok = r
         r += 1.0
-    return last_ok
+    return cap, True                     # reached the cap with no drop — not pushed further
 
 
 def bench(host, name, pings, do_ceiling):
@@ -123,9 +125,14 @@ def bench(host, name, pings, do_ceiling):
               f"p95 {lat['p95']:.0f} · jitter ±{lat['jitter']:.0f} ms"
               + (f" · {lat['drops']}/{lat['n']} dropped" if lat['drops'] else ""))
     if do_ceiling:
-        c = ceiling(host)
-        print(f"    command ceiling: ~{c:.0f} cmd/s sustained "
-              f"(the stage tools cap at 4.2/s for headroom)")
+        c, hit_cap = ceiling(host)
+        if hit_cap:
+            print(f"    command ceiling: **≥ {c:.0f} cmd/s** — reached the {c:.0f}/s safety cap "
+                  f"with NO drop; the real ceiling is higher but was NOT pushed further "
+                  f"(would risk crashing the ESP). Stage tools cap at 4.2/s for headroom.")
+        else:
+            print(f"    command ceiling: ~{c:.0f} cmd/s sustained (started dropping above that). "
+                  f"Stage tools cap at 4.2/s for headroom.")
 
 
 def main(argv=None):
