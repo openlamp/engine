@@ -15,7 +15,7 @@ Two modes (config "mode"):
 Group-mode model (wled-midi v0.3):
   - CHANNEL = a lamp group/target (1-16 per port; channel 1 = "all").
   - NOTES are organised in zones:
-      LOOKS (60-68)      what the lamp SHOWS, mutually exclusive: 8 colours + effect.
+      LOOKS (59-68)      what the lamp SHOWS, mutually exclusive: black + 7 hues + white + effect.
       POWER/UTIL (48-56) on/off/toggle/blackout/restore/solid.
       MODIFIERS (72-75)  overlay the current look: beat toggle, flash.
   - CC (1-8) shapes the current look: bri/cct/hue/sat/fx/sx/ix/pal.
@@ -51,6 +51,7 @@ DEFAULT = {
     "channels": {"1": "all", "2": "front", "3": "back", "4": "L1", "5": "L2"},
     # LOOKS (what the lamp shows) — note -> [r,g,b], or "effect".
     "looks": {
+        "59": [0, 0, 0],
         "60": [255, 0, 0], "61": [255, 85, 0], "62": [255, 200, 0], "63": [0, 255, 0],
         "64": [0, 200, 255], "65": [0, 0, 255], "66": [255, 0, 170], "67": [255, 255, 255],
         "68": "effect",
